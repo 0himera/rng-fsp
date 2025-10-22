@@ -14,7 +14,7 @@ from randomtrust.core import (
 )
 from randomtrust.entropy import EntropyMixer, LorenzChaosSimulator, NoiseSimulator
 from randomtrust.rng.generator import ChaCha20RNGFactory
-from randomtrust.services import AuditService, EntropyService, RNGService, UnitOfWork
+from randomtrust.services import AuditService, AnalysisService, EntropyService, RNGService, UnitOfWork
 
 
 @lru_cache
@@ -107,3 +107,10 @@ def get_audit_service(
     minio = Depends(get_minio_client),
 ) -> AuditService:
     return AuditService(storage=minio, settings=settings)
+
+
+def get_analysis_service(
+    settings: Annotated[Settings, Depends(get_settings_dep)],
+    minio = Depends(get_minio_client),
+) -> AnalysisService:
+    return AnalysisService(storage=minio, settings=settings)

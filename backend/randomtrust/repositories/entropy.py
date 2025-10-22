@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from randomtrust.models import ChaosRun, EntropySimulation
@@ -57,6 +58,21 @@ class EntropyRepository:
         return record
 
     async def get_simulation(self, simulation_id: uuid.UUID) -> EntropySimulation | None:
-        stmt = select(EntropySimulation).where(EntropySimulation.id == simulation_id)
+        stmt = (
+            select(EntropySimulation)
+            .options(selectinload(EntropySimulation.chaos_run))
+            .where(EntropySimulation.id == simulation_id)
+        )
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def list_simulations(self, *, limit: int, offset: int) -> list[EntropySimulation]:
+        stmt = (
+            select(EntropySimulation)
+            .options(selectinload(EntropySimulation.chaos_run))
+            .order_by(EntropySimulation.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars())

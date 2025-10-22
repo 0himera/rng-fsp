@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import io
 import uuid
+from dataclasses import dataclass
 from hashlib import blake2s
 
 from minio import Minio
+from minio.error import S3Error
 
 from randomtrust.core import Settings
 from randomtrust.rng.generator import ChaCha20RNGFactory
@@ -26,6 +28,33 @@ class GeneratedSequence:
         self.data = data
         self.format = format
         self.metrics = metrics
+
+
+class RunExportError(RuntimeError):
+    """Base error for run export operations."""
+
+
+class RunNotFoundError(RunExportError):
+    pass
+
+
+class RunDataUnavailableError(RunExportError):
+    pass
+
+
+class InsufficientBitsError(RunExportError):
+    def __init__(self, available: int, required: int) -> None:
+        super().__init__(f"available bits {available} less than required {required}")
+        self.available = available
+        self.required = required
+
+
+@dataclass(slots=True)
+class RunBitsExport:
+    run_id: uuid.UUID
+    bits_count: int
+    content: bytes
+    filename: str
 
 
 class RNGService:
@@ -106,3 +135,46 @@ class RNGService:
 
         digest = blake2s(payload).digest()
         return {"path": path, "digest": digest}
+
+    async def export_bits(
+        self,
+        *,
+        uow: UnitOfWork,
+        run_id: uuid.UUID,
+        min_bits: int = 1_000_000,
+    ) -> RunBitsExport:
+        run = await uow.rng.get_run(run_id)
+        if run is None:
+            raise RunNotFoundError(f"run {run_id} not found")
+        if not run.export_path:
+            raise RunDataUnavailableError("run has no persisted sequence to export")
+
+        payload = self._download_sequence(run.export_path)
+        bits_text = self._bytes_to_bits_text(payload)
+        bits_count = len(bits_text)
+        if bits_count < min_bits:
+            raise InsufficientBitsError(bits_count, min_bits)
+
+        filename = f"{run_id}_bits.txt"
+        content = bits_text.encode("ascii")
+        return RunBitsExport(run_id=run_id, bits_count=bits_count, content=content, filename=filename)
+
+    def _download_sequence(self, path: str) -> bytes:
+        obj = None
+        try:
+            obj = self._storage.get_object(self._settings.minio_bucket, path)
+            data = obj.read()
+        except S3Error as exc:
+            raise RunDataUnavailableError(f"failed to fetch object {path}: {exc}") from exc
+        finally:
+            if obj is not None:
+                try:
+                    obj.close()
+                    obj.release_conn()
+                except Exception:
+                    pass
+        return data
+
+    @staticmethod
+    def _bytes_to_bits_text(payload: bytes) -> str:
+        return "".join(f"{byte:08b}" for byte in payload)

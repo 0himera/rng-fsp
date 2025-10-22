@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from randomtrust.models import RNGRun
@@ -38,6 +39,16 @@ class RNGRepository:
         return record
 
     async def get_run(self, run_id: uuid.UUID) -> RNGRun | None:
-        stmt = select(RNGRun).where(RNGRun.id == run_id)
+        stmt = select(RNGRun).options(selectinload(RNGRun.test_reports)).where(RNGRun.id == run_id)
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def list_runs(self, *, limit: int, offset: int) -> list[RNGRun]:
+        stmt = (
+            select(RNGRun)
+            .order_by(RNGRun.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        result = await self._session.execute(stmt)
+        return list(result.scalars())
