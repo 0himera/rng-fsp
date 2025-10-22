@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Iterable
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 
 from randomtrust.analysis import AVAILABLE_TESTS
 from randomtrust.api.dependencies import (
@@ -25,7 +25,12 @@ from randomtrust.services.analysis_service import (
 router = APIRouter()
 
 
-@router.get("/tests", response_model=list[str])
+@router.get(
+    "/tests",
+    response_model=list[str],
+    summary="Список доступных статистических тестов",
+    description="Возвращает идентификаторы тестов, которые могут быть переданы в запросах анализа.",
+)
 async def list_available_tests() -> list[str]:
     return list(AVAILABLE_TESTS.keys())
 
@@ -43,10 +48,28 @@ def _serialize_outcomes(outcomes: Iterable) -> list[TestOutcomeView]:
     ]
 
 
-@router.post("/runs/{run_id}", response_model=RunAnalysisResponse)
+@router.post(
+    "/runs/{run_id}",
+    response_model=RunAnalysisResponse,
+    summary="Запустить статистический анализ генерации",
+    description="Выполняет набор тестов случайности над сохранённой последовательностью генерации и сохраняет результаты в базе.",
+)
 async def run_analysis_for_run(
     run_id: UUID,
-    payload: AnalysisRequest,
+    payload: AnalysisRequest = Body(
+        ...,
+        description="Перечень тестов. Если `tests` не задан, выполняется полный набор (frequency, runs, chi_square).",
+        examples={
+            "all": {
+                "summary": "Полный анализ",
+                "value": {"tests": None},
+            },
+            "subset": {
+                "summary": "Только частотный тест",
+                "value": {"tests": ["frequency"]},
+            },
+        },
+    ),
     uow: UnitOfWork = Depends(get_unit_of_work),
     analysis_service: AnalysisService = Depends(get_analysis_service),
 ) -> RunAnalysisResponse:
@@ -69,10 +92,28 @@ async def run_analysis_for_run(
     )
 
 
-@router.post("/audits/{audit_id}", response_model=AuditAnalysisResponse)
+@router.post(
+    "/audits/{audit_id}",
+    response_model=AuditAnalysisResponse,
+    summary="Анализировать загруженную последовательность",
+    description="Запускает выбранные тесты над внешним hex-файлом, сохранённым через эндпоинт аудита.",
+)
 async def run_analysis_for_audit(
     audit_id: UUID,
-    payload: AnalysisRequest,
+    payload: AnalysisRequest = Body(
+        ...,
+        description="Список идентификаторов тестов или `null`, чтобы выполнить все доступные тесты.",
+        examples={
+            "default": {
+                "summary": "Полный набор",
+                "value": {"tests": None},
+            },
+            "runs-only": {
+                "summary": "Тест на количество серий",
+                "value": {"tests": ["runs"]},
+            },
+        },
+    ),
     uow: UnitOfWork = Depends(get_unit_of_work),
     analysis_service: AnalysisService = Depends(get_analysis_service),
 ) -> AuditAnalysisResponse:

@@ -3,7 +3,7 @@ from __future__ import annotations
 import io
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 
 from randomtrust.api.dependencies import get_rng_service, get_unit_of_work
@@ -20,10 +20,48 @@ from randomtrust.services.rng_service import (
 router = APIRouter()
 
 
-@router.post("/generate", response_model=RNGGenerateResponse)
+@router.post(
+    "/generate",
+    response_model=RNGGenerateResponse,
+    summary="Сгенерировать последовательность ChaCha20",
+    description="Инициирует запуск ChaCha20 на основе только что полученной энтропии."
+    " Позволяет выбрать формат ответа (hex или байтовый массив).",
+)
 async def generate_rng(
-    payload: RNGGenerateRequest,
-    format: RNGOutputFormat = Query(default="hex"),
+    payload: RNGGenerateRequest = Body(
+        ...,
+        description="Параметры генерации. Поле `parameters` при отсутствии использует значения по умолчанию у шума.",
+        examples={
+            "hex": {
+                "summary": "Hex-последовательность",
+                "value": {
+                    "length": 64,
+                    "noise_seed": 123,
+                    "parameters": {
+                        "duration_ms": 200,
+                        "hum_amplitude": 0.5,
+                        "noise_amplitude": 0.6,
+                        "spike_density": 0.03,
+                        "spike_amplitude": 0.15,
+                    },
+                },
+            },
+            "ints": {
+                "summary": "Байтовый массив",
+                "value": {
+                    "length": 128,
+                    "parameters": {
+                        "duration_ms": 150,
+                        "noise_amplitude": 0.8,
+                    },
+                },
+            },
+        },
+    ),
+    format: RNGOutputFormat = Query(
+        default="hex",
+        description="Желаемый формат ответа: `hex` (строка) или `ints` (список байтов).",
+    ),
     uow: UnitOfWork = Depends(get_unit_of_work),
     rng_service: RNGService = Depends(get_rng_service),
 ) -> RNGGenerateResponse:
@@ -84,10 +122,24 @@ def _serialize_run_detail(record) -> RNGRunDetail:
     )
 
 
-@router.get("/runs", response_model=list[RNGRunSummary])
+@router.get(
+    "/runs",
+    response_model=list[RNGRunSummary],
+    summary="Перечислить запуски генератора",
+    description="Возвращает историю генераций ChaCha20 с ключевыми метаданными и ссылками на артефакты.",
+)
 async def list_runs(
-    limit: int = Query(default=20, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+    limit: int = Query(
+        default=20,
+        ge=1,
+        le=100,
+        description="Максимальное число записей в ответе (1–100).",
+    ),
+    offset: int = Query(
+        default=0,
+        ge=0,
+        description="Количество строк, которые нужно пропустить (пагинация).",
+    ),
     uow: UnitOfWork = Depends(get_unit_of_work),
 ) -> list[RNGRunSummary]:
     async with uow:
@@ -95,7 +147,12 @@ async def list_runs(
     return [_serialize_run_summary(record) for record in records]
 
 
-@router.get("/runs/{run_id}", response_model=RNGRunDetail)
+@router.get(
+    "/runs/{run_id}",
+    response_model=RNGRunDetail,
+    summary="Получить детальную информацию о запуске",
+    description="Возвращает данные генерации, включая контрольные суммы и результаты статистических тестов.",
+)
 async def get_run(
     run_id: UUID,
     uow: UnitOfWork = Depends(get_unit_of_work),
@@ -107,10 +164,20 @@ async def get_run(
     return _serialize_run_detail(record)
 
 
-@router.get("/runs/{run_id}/export", response_class=StreamingResponse)
+@router.get(
+    "/runs/{run_id}/export",
+    response_class=StreamingResponse,
+    summary="Выгрузить битовую последовательность",
+    description="Отдаёт сохранённую последовательность в виде текстового файла, содержащего битовую строку."
+    " Используется для передачи в тестовые батареи NIST STS / Dieharder.",
+)
 async def export_run_bits(
     run_id: UUID,
-    min_bits: int = Query(default=1_000_000, ge=1, description="Minimum number of bits required"),
+    min_bits: int = Query(
+        default=1_000_000,
+        ge=1,
+        description="Минимальное количество бит, требуемое в файле. Ошибка 422, если доступно меньше.",
+    ),
     uow: UnitOfWork = Depends(get_unit_of_work),
     rng_service: RNGService = Depends(get_rng_service),
 ):

@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 
 from randomtrust.api.dependencies import (
     get_entropy_service,
@@ -17,9 +17,33 @@ from randomtrust.services import EntropyService, UnitOfWork
 router = APIRouter()
 
 
-@router.post("/mix", response_model=EntropyMixResponse)
+@router.post(
+    "/mix",
+    response_model=EntropyMixResponse,
+    summary="Смоделировать гибридный источник энтропии",
+    description="Выполняет одну итерацию смешивания стохастического шума и хаотической динамики,"
+    " сохраняет артефакты в MinIO и возвращает метрики энтропии.",
+)
 async def mix_entropy(
-    payload: EntropyMixRequest,
+    payload: EntropyMixRequest = Body(
+        ...,
+        description="Параметры генератора шума. Если поле `parameters` не указано, используются значения по умолчанию.",
+        examples={
+            "default": {
+                "summary": "Базовая симуляция",
+                "value": {
+                    "noise_seed": 42,
+                    "parameters": {
+                        "duration_ms": 250,
+                        "hum_amplitude": 0.4,
+                        "noise_amplitude": 0.7,
+                        "spike_density": 0.05,
+                        "spike_amplitude": 0.2,
+                    },
+                },
+            }
+        },
+    ),
     uow: UnitOfWork = Depends(get_unit_of_work),
     entropy_service: EntropyService = Depends(get_entropy_service),
 ) -> EntropyMixResponse:
@@ -79,10 +103,24 @@ def _serialize_simulation_detail(simulation) -> EntropySimulationDetail:
     )
 
 
-@router.get("/simulations", response_model=list[EntropySimulationSummary])
+@router.get(
+    "/simulations",
+    response_model=list[EntropySimulationSummary],
+    summary="Перечислить сохранённые симуляции",
+    description="Возвращает страницу сохранённых энтропийных прогонов с метаданными и ключевыми метриками.",
+)
 async def list_simulations(
-    limit: int = Query(default=20, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+    limit: int = Query(
+        default=20,
+        ge=1,
+        le=100,
+        description="Максимальное количество записей в ответе (1–100).",
+    ),
+    offset: int = Query(
+        default=0,
+        ge=0,
+        description="Количество записей, которые необходимо пропустить от начала выборки.",
+    ),
     uow: UnitOfWork = Depends(get_unit_of_work),
 ) -> list[EntropySimulationSummary]:
     async with uow:
@@ -90,7 +128,13 @@ async def list_simulations(
     return [_serialize_simulation_summary(record) for record in records]
 
 
-@router.get("/simulations/{simulation_id}", response_model=EntropySimulationDetail)
+@router.get(
+    "/simulations/{simulation_id}",
+    response_model=EntropySimulationDetail,
+    summary="Получить детали энтропийной симуляции",
+    description="Возвращает полную конфигурацию симуляции, включая пути к сигналам и траекториям,"
+    " а также показатели хаотической динамики.",
+)
 async def get_simulation(
     simulation_id: UUID,
     uow: UnitOfWork = Depends(get_unit_of_work),

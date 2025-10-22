@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 
 from randomtrust.api.dependencies import get_audit_service, get_unit_of_work
 from randomtrust.schemas.audit import AuditSequenceRequest, AuditSequenceResponse
@@ -9,9 +9,27 @@ from randomtrust.services import AuditService, UnitOfWork
 router = APIRouter()
 
 
-@router.post("/upload", response_model=AuditSequenceResponse)
+@router.post(
+    "/upload",
+    response_model=AuditSequenceResponse,
+    summary="Загрузить внешнюю последовательность",
+    description="Принимает hex-последовательность для последующего статистического анализа и хранения артефактов.",
+)
 async def upload_sequence(
-    payload: AuditSequenceRequest,
+    payload: AuditSequenceRequest = Body(
+        ...,
+        description="Метаданные и hex-последовательность. Длина ограничена размером принимаемого JSON.",
+        examples={
+            "sample": {
+                "summary": "Короткая последовательность",
+                "value": {
+                    "name": "external-generator",
+                    "description": "Тестовая выборка внешнего генератора",
+                    "data": "deadbeefcafebabe",
+                },
+            }
+        },
+    ),
     uow: UnitOfWork = Depends(get_unit_of_work),
     audit_service: AuditService = Depends(get_audit_service),
 ) -> AuditSequenceResponse:
