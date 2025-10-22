@@ -84,6 +84,8 @@ async def run_analysis_for_run(
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except SubjectDataUnavailableError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     return RunAnalysisResponse(
         run_id=result.run_id,
@@ -127,6 +129,8 @@ async def run_analysis_for_audit(
         except SubjectNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except SubjectDataUnavailableError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     return AuditAnalysisResponse(

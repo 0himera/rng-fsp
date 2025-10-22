@@ -173,6 +173,7 @@ curl "http://localhost:8000/api/analysis/tests"
 - **Назначение**: запустить выбранные тесты над сохранённой генерацией.
 - **Тело** (`AnalysisRequest`): `tests` — список названий тестов или `null` для полного набора.
 - **Ответ** (`RunAnalysisResponse`): `run_id`, `export_path`, `outcomes` — массив `TestOutcomeView` (`name`, `passed`, `statistic`, `threshold`, `details`). Результаты дополнительно сохраняются в таблицу `test_reports` и доступны через `GET /api/rng/runs/{id}`.
+- **Ошибки**: HTTP 422 при передаче неизвестного названия теста.
 
 **Пример запроса**
 
@@ -189,6 +190,7 @@ curl -X POST "http://localhost:8000/api/analysis/runs/<run_id>" \
 - **Назначение**: проанализировать загруженную внешнюю последовательность.
 - **Тело**: аналогично `AnalysisRequest`.
 - **Ответ** (`AuditAnalysisResponse`): `audit_id`, `data_hash`, `outcomes`.
+- **Ошибки**: HTTP 422 при передаче неизвестного названия теста.
 
 **Пример запроса**
 
