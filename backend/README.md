@@ -76,8 +76,14 @@ backend/
 ### Основные эндпоинты
 
 - `POST /api/entropy/mix` — запускает симуляцию шума + хаоса и сохраняет результат.
+- `GET /api/entropy/simulations`, `GET /api/entropy/simulations/{id}` — перечисление и детальный просмотр сохранённых энтропийных прогонов.
 - `POST /api/rng/generate` — генерирует последовательность (hex/ints) на базе свежей энтропии.
+- `GET /api/rng/runs`, `GET /api/rng/runs/{id}` — доступ к истории генераций и привязанным отчётам.
+- `GET /api/rng/runs/{id}/export` — выгрузка текстового файла ≥1 000 000 бит для статистических тестов.
 - `POST /api/audit/upload` — сохраняет предоставленную hex-последовательность для аудита.
+- `POST /api/analysis/runs/{id}` — запускает набор статистических тестов над сохранённой генерацией.
+- `POST /api/analysis/audits/{id}` — анализирует загруженную внешнюю последовательность.
+- `GET /api/analysis/tests` — возвращает перечень доступных тестов (frequency, runs, chi_square).
 
 ### Проверка работы
 
@@ -89,6 +95,12 @@ curl -X POST http://localhost:8000/api/rng/generate \
 curl -X POST http://localhost:8000/api/audit/upload \
   -H "Content-Type: application/json" \
   -d '{"name": "demo", "data": "deadbeef"}'
+
+curl -X POST http://localhost:8000/api/analysis/runs/<run_id> \
+  -H "Content-Type: application/json" \
+  -d '{}'
+
+curl -OJ "http://localhost:8000/api/rng/runs/<run_id>/export?min_bits=1000000"
 ```
 
 ## Кодстайл
