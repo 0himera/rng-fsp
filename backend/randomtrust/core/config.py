@@ -1,8 +1,10 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
-from pydantic import AnyUrl, Field
+from pydantic import AnyUrl, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings.sources import EnvSettingsSource
 
 
 class Settings(BaseSettings):
@@ -31,12 +33,56 @@ class Settings(BaseSettings):
 
     rng_export_path: Path = Field(default=Path("/data/runs"))
 
+    cors_allow_origins: list[str] = Field(default_factory=lambda: ["*"])
+    cors_allow_methods: list[str] = Field(default_factory=lambda: ["*"])
+    cors_allow_headers: list[str] = Field(default_factory=lambda: ["*"])
+    cors_allow_credentials: bool = Field(default=True)
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
     )
+
+    @staticmethod
+    def _parse_csv(value: Any) -> list[str] | Any:
+        if isinstance(value, str):
+            items = [item.strip() for item in value.split(",") if item.strip()]
+            return items or ["*"]
+        return value
+
+    @field_validator("cors_allow_origins", "cors_allow_methods", "cors_allow_headers", mode="before")
+    @classmethod
+    def _prepare_list_fields(cls, value: Any) -> list[str] | Any:
+        return cls._parse_csv(value)
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls,
+        init_settings,
+        env_settings,
+        dotenv_settings,
+        file_secret_settings,
+    ):
+        class LenientEnvSettingsSource(EnvSettingsSource):
+            def decode_complex_value(self, field_name, field, value):
+                try:
+                    return super().decode_complex_value(field_name, field, value)
+                except ValueError:
+                    return value
+
+        def lenient_env_settings(settings_cls=settings_cls):
+            source = LenientEnvSettingsSource(settings_cls)
+            return source()
+
+        return (
+            init_settings,
+            lenient_env_settings,
+            dotenv_settings,
+            file_secret_settings,
+        )
 
 
 @lru_cache
