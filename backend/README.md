@@ -8,70 +8,33 @@
 
 ```text
 backend/
-  pyproject.toml
-  README.md
-  docker-compose.yml
-  .env.example
   randomtrust/
-    __init__.py
-    app.py
-    core/
-      config.py
-      database.py
-      logging.py
-      redis.py
-      storage.py
-    api/
-      __init__.py
-      dependencies.py
-      routers/
-        __init__.py
-        entropy.py
-        rng.py
-        audit.py
-    entropy/
-      simulator.py
-      chaos.py
-      mixer.py
-    rng/
-      generator.py
-    models/
-      __init__.py
-      base.py
-      entropy.py
-      rng_run.py
-      test_report.py
-      audit.py
-    repositories/
-      __init__.py
-      entropy.py
-      rng.py
-      test_report.py
-      audit.py
-    services/
-      __init__.py
-      unit_of_work.py
-      entropy_service.py
-      rng_service.py
-      audit_service.py
-
-  alembic/
-    env.py
-    versions/
-      20241022_0001_initial_schema.py
-
-  docker/
-    fastapi/Dockerfile
+    api/              # FastAPI роутеры и зависимости
+    core/             # конфиг, соединения с БД/Redis/MinIO, логирование
+    entropy/          # генерация шума и хаотической траектории
+    rng/              # криптографический генератор (ChaCha20) и фабрика
+    services/         # бизнес-слой (EntropyService, RNGService, AuditService)
+    repositories/     # единицы работы и доступ к БД
+    models/           # SQLAlchemy модели
+  alembic/            # миграции БД
+  docker/             # Dockerfile и инфраструктурные скрипты
 ```
+
+## Конвейер генерации случайной последовательности
+
+1. **EntropyMixer** (`randomtrust/entropy/mixer.py`) объединяет стохастический шум (`simulator.py`) и хаотическую траекторию Лоренца (`chaos.py`).
+2. **EntropyService.create_entropy()** (`randomtrust/services/entropy_service.py`) вызывает миксер, сохраняет сид, метрики (`snr_db`, `spectral_deviation_percent`, `lyapunov_exponent`) и сырьё в MinIO БД.
+3. **RNGService.generate()** (`randomtrust/services/rng_service.py`) получает свежий сид, создаёт `ChaCha20RNG` (`randomtrust/rng/generator.py`) и генерирует поток в формате `hex` или `ints`.
+4. **Хранение и отчёты**: последовательность попадет в MinIO, хэши и метрики записываются в `rng_runs`; последующие тесты (`analysis_service.py`) используют тот же набор артефактов.
+
+Повторный запуск с тем же `noise_seed` воспроизводит идентичный ChaCha20 поток; без seed энтропия формируется заново и последовательность уникальна.
 
 ## Быстрый старт
 
-1. Установите Poetry 1.8+ в классическом режиме.
-2. Выполните `poetry install` из директории `backend/`.
-3. Создайте файл `.env` по шаблону `.env.example`.
-4. Запустите инфраструктуру (Postgres, Redis, MinIO и FastAPI): `docker compose up --build`.
-5. Примените миграции БД (внутри контейнера или локально): `docker compose run --rm fastapi-app poetry run alembic upgrade head`.
-6. API будет доступен на `http://localhost:8000`.
+1. Создайте файл `.env` по шаблону `.env.example`.
+2. Запустите инфраструктуру (Postgres, Redis, MinIO и FastAPI): `docker compose up --build` из директории `backend/`.
+3. Примените миграции БД (внутри контейнера или локально): `docker compose run --rm fastapi-app poetry run alembic upgrade head`.
+4. API будет доступен на `http://localhost:8000`.
 
 ### Основные эндпоинты
 
