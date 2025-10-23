@@ -66,11 +66,6 @@ curl -X POST http://localhost:8000/api/analysis/runs/<run_id> \
 curl -OJ "http://localhost:8000/api/rng/runs/<run_id>/export?min_bits=1000000"
 ```
 
-## Кодстайл
-
-- Формат и статический анализ: `ruff`, `mypy`.
-- Тесты: `pytest`, `pytest-asyncio`.
-- Логирование структурировано через `structlog`.
 
 ## Лицензирование
 
