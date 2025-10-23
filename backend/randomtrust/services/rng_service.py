@@ -80,6 +80,7 @@ class RNGService:
         noise_seed: int | None,
         overrides: dict[str, float] | None,
     ) -> GeneratedSequence:
+        # Always obtain fresh entropy so each run is traceable to a simulation record.
         stored_entropy = await self._entropy_service.create_entropy(
             uow=uow,
             noise_seed=noise_seed,
@@ -87,6 +88,7 @@ class RNGService:
         )
 
         run_id = uuid.uuid4()
+        # ChaCha20 key/nonce pair derives from the stored seed.
         rng = await self._rng_factory.create_rng(run_id=run_id, seed=stored_entropy.seed)
 
         if fmt == "hex":
@@ -96,9 +98,11 @@ class RNGService:
         else:
             raise ValueError("Unsupported format")
 
+        # Sequence is persisted in MinIO to support later audits/export.
         checksum = self._store_sequence(run_id, data, fmt)
 
         repo = uow.rng
+        # Persist metadata enabling reproducibility and linkage to entropy simulation.
         await repo.add_run(
             run_id=run_id,
             entropy_simulation_id=stored_entropy.simulation_id,
@@ -125,6 +129,7 @@ class RNGService:
 
         path = f"runs/{run_id}/sequence.bin"
         stream = io.BytesIO(payload)
+        # Store opaque binary so consumers can choose export format later.
         self._storage.put_object(
             self._settings.minio_bucket,
             path,
@@ -149,6 +154,7 @@ class RNGService:
         if not run.export_path:
             raise RunDataUnavailableError("run has no persisted sequence to export")
 
+        # Download the raw bytes and transform them to human-readable bit string.
         payload = self._download_sequence(run.export_path)
         bits_text = self._bytes_to_bits_text(payload)
         bits_count = len(bits_text)

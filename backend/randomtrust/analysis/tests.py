@@ -97,14 +97,17 @@ AVAILABLE_TESTS = {
 
 def run_selected_tests(bits: Iterable[int], tests: Iterable[str] | None = None) -> list[TestOutcome]:
     bit_list = list(bits)
+    # Reject empty inputs early to avoid division errors in subsequent tests.
     if not bit_list:
         raise ValueError("No bits provided for analysis")
     selected = tests or AVAILABLE_TESTS.keys()
     outcomes: list[TestOutcome] = []
     for name in selected:
+        # Guard against unsupported identifiers passed from external callers.
         if name not in AVAILABLE_TESTS:
             raise ValueError(f"unknown test: {name}")
         test_fn = AVAILABLE_TESTS[name]
         outcome = test_fn(bit_list)
+        # Collect normalized outcome objects for API serialization.
         outcomes.append(outcome)
     return outcomes

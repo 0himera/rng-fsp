@@ -26,6 +26,7 @@ class ChaCha20RNG:
         encryptor = cipher.encryptor()
 
         if self.counter:
+            # Consume previous blocks so that the next output aligns with the stored counter.
             discard = encryptor.update(b"\x00" * (self.counter * 64))
             # Ensure the discard occurs even if not used, satisfying counter advance.
             _ = discard
@@ -48,18 +49,22 @@ class ChaCha20RNGFactory:
         self._namespace = namespace
 
     async def create_rng(self, run_id: UUID, seed: bytes) -> ChaCha20RNG:
+        # Use first 32 bytes of the entropy seed as ChaCha20 key material.
         key = seed[:32]
+        # Nonce is derived deterministically from run identifier and seed.
         nonce = self._derive_nonce(run_id, seed)
         rng = ChaCha20RNG(key=key, nonce=nonce)
         await self._store_metadata(run_id, seed, nonce)
         return rng
 
     def _derive_nonce(self, run_id: UUID, seed: bytes) -> bytes:
+        # BLAKE2s ensures nonce uniqueness per run without leaking the seed.
         digest = blake2s(run_id.bytes + seed, digest_size=16)
         return digest.digest()
 
     async def _store_metadata(self, run_id: UUID, seed: bytes, nonce: bytes) -> None:
         key = f"{self._namespace}:{run_id}"
+        # Persist derived parameters for auditing and reproducibility.
         await self._redis.hset(
             key,
             mapping={

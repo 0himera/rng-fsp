@@ -47,9 +47,11 @@ class EntropyService:
         noise_seed: int | None,
         overrides: dict[str, float] | None,
     ) -> StoredEntropy:
+        # Mix simulated noise and chaotic dynamics into a single entropy artifact.
         result = self._mixer.mix_entropy(noise_seed=noise_seed, parameter_overrides=overrides)
         simulation_id = uuid.uuid4()
 
+        # Persist raw noise samples and chaotic trajectory for downstream audits.
         noise_path = self._upload_buffer(result.noise_sample.signal.tobytes(), f"entropy/sim_raw/{simulation_id}.bin")
         chaos_path = self._upload_buffer(
             result.chaos_trajectory.astype("<f4").tobytes(),
@@ -57,6 +59,7 @@ class EntropyService:
         )
 
         repo = uow.entropy
+        # Record simulation metadata, metrics, and hashes for reproducibility.
         await repo.add_simulation(
             simulation_id=simulation_id,
             noise_seed=noise_seed,
@@ -91,6 +94,7 @@ class EntropyService:
         )
 
     def _upload_buffer(self, data: bytes, path: str) -> str:
+        # Streams bytes directly into MinIO to avoid loading large buffers in memory twice.
         stream = io.BytesIO(data)
         self._storage.put_object(
             self._settings.minio_bucket,
